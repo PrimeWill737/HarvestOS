@@ -1,0 +1,9 @@
+node_modules/
+.next/
+.env*
+!.env.example
+.tmp/
+.bun-cache/
+playwright-report/
+test-results/
+*.tsbuildinfo

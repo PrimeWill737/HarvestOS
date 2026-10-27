@@ -1,0 +1,12 @@
+.map {
+  height: 340px;
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #e2e8df;
+}
+@media (max-width: 640px) {
+  .map {
+    height: 260px;
+  }
+}

@@ -1,0 +1,1 @@
+import {defineConfig} from 'vitest/config';import {resolve} from 'node:path';export default defineConfig({resolve:{alias:{'@':resolve(__dirname,'src'),'server-only':resolve(__dirname,'tests/empty.ts')}},test:{include:['tests/unit/**/*.test.ts','tests/integration/**/*.test.ts'],testTimeout:30000,hookTimeout:30000,maxWorkers:1}});
