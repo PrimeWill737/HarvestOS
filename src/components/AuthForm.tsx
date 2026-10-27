@@ -28,7 +28,13 @@ export default function AuthForm({ mode }: { mode: string }) {
         email = String(f.get('email') || ''),
         password = String(f.get('password') || '');
       let error: any;
-      if (mode === 'register') {
+      if (mode === 'login' && factor) {
+        ({ error } = await client.auth.mfa.challengeAndVerify({
+          factorId: factor,
+          code: String(f.get('code') || ''),
+        }));
+        if (!error) location.assign('/auth/complete');
+      } else if (mode === 'register') {
         ({ error } = await client.auth.signUp({
           email,
           password,
@@ -53,6 +59,11 @@ export default function AuthForm({ mode }: { mode: string }) {
         ({ error } = await client.auth.updateUser({ password }));
         if (!error) setMessage('Password updated. You can return to your workspace.');
       } else if (mode === 'mfa') {
+        const { data: session, error: sessionError } = await client.auth.getUser();
+        if (sessionError || !session.user) {
+          location.assign('/auth/login');
+          return;
+        }
         let fid = factor;
         if (!fid) {
           const { data: fs, error: fe } = await client.auth.mfa.listFactors();
@@ -77,10 +88,21 @@ export default function AuthForm({ mode }: { mode: string }) {
           factorId: fid,
           code: String(f.get('code')),
         }));
-        if (!error) location.assign('/workspace/super-admin');
+        if (!error) location.assign('/auth/complete');
       } else {
         ({ error } = await client.auth.signInWithPassword({ email, password }));
-        if (!error) location.assign('/workspace/farmer');
+        if (!error) {
+          const { data, error: factorError } = await client.auth.mfa.listFactors();
+          if (factorError) throw factorError;
+          const existing = data.totp.find((x) => x.status === 'verified');
+          if (existing) {
+            setFactor(existing.id);
+            setMessageKind('info');
+            setMessage('Enter the six-digit code from your authenticator to finish signing in.');
+          } else {
+            location.assign('/auth/complete');
+          }
+        }
       }
       if (error) throw error;
     } catch (err) {
@@ -118,18 +140,41 @@ export default function AuthForm({ mode }: { mode: string }) {
             recover: 'Recover your account',
             reset: 'Choose a new password',
             mfa: 'Secure administrator access',
+            'mfa-recovery': 'Recover authenticator access',
           }[mode] || 'Welcome back'}
         </h2>
         <p>
           {mode === 'register'
             ? 'Start with your identity. Add an organization after verification.'
-            : 'Sign in to your shared operations workspace.'}
+            : mode === 'mfa-recovery'
+              ? 'Lost your authenticator? A project administrator can help you recover access.'
+            : mode === 'mfa'
+              ? 'Set up or verify your authenticator to access administrator tools.'
+              : 'Sign in to your shared operations workspace.'}
         </p>
-        {!ready && (
+        {!ready && mode !== 'mfa-recovery' && (
           <div className="notice">
             Local preview: authentication activates when you add your Supabase credentials.
           </div>
         )}
+        {mode === 'mfa-recovery' ? (
+          <div>
+            <ol>
+              <li>Contact your project administrator and provide the email address you use for HarvestOS.</li>
+              <li>The administrator must verify your identity before removing the old authenticator enrollment.</li>
+              <li>After the reset, sign in with your email and password and set up a new authenticator when prompted.</li>
+            </ol>
+            <p>
+              If you are the super administrator, contact someone who manages your Supabase project
+              to reset your enrollment through the project dashboard.
+            </p>
+            <p>
+              Your email address identifies your account; it does not authorize a reset.
+              Resetting your password does not remove MFA. Never share your password or authenticator codes.
+            </p>
+            <Link className="button" href="/auth/login">Back to sign in</Link>
+          </div>
+        ) : (
         <form onSubmit={submit}>
           {mode === 'register' && (
             <label>
@@ -137,13 +182,13 @@ export default function AuthForm({ mode }: { mode: string }) {
               <input name="full_name" required autoComplete="name" />
             </label>
           )}
-          {!['reset', 'mfa'].includes(mode) && (
+          {!['reset', 'mfa'].includes(mode) && !factor && (
             <label>
               Email address
               <input name="email" type="email" required autoComplete="email" />
             </label>
           )}
-          {!['recover', 'mfa'].includes(mode) && (
+          {!['recover', 'mfa'].includes(mode) && !factor && (
             <label>
               Password
               <input
@@ -156,7 +201,7 @@ export default function AuthForm({ mode }: { mode: string }) {
               <small>Use at least 12 characters.</small>
             </label>
           )}
-          {mode === 'mfa' && (
+          {(mode === 'mfa' || (mode === 'login' && factor)) && (
             <>
               {qr && <img className="qr" src={qr} alt="Authenticator enrollment QR code" />}
               {factor && (
@@ -166,6 +211,7 @@ export default function AuthForm({ mode }: { mode: string }) {
                     name="code"
                     inputMode="numeric"
                     pattern="[0-9]{6}"
+                    maxLength={6}
                     required
                     autoComplete="one-time-code"
                   />
@@ -176,7 +222,7 @@ export default function AuthForm({ mode }: { mode: string }) {
           <button disabled={busy} className="button">
             {busy
               ? 'Working…'
-              : mode === 'mfa'
+              : mode === 'mfa' || (mode === 'login' && factor)
                 ? factor
                   ? 'Verify code'
                   : 'Set up or verify MFA'
@@ -190,11 +236,13 @@ export default function AuthForm({ mode }: { mode: string }) {
           </button>
           <AuthNotice message={message} kind={messageKind} mode={mode} />
         </form>
+        )}
         <div className="auth-links">
           <Link href="/auth/register">Create an account</Link>
           <Link href="/auth/recover">Forgot password?</Link>
-          <Link href="/auth/mfa">Administrator MFA</Link>
-          <Link href="/workspace/operations">Explore local preview</Link>
+          {mode !== 'mfa-recovery' && (
+            <Link href="/auth/mfa-recovery">Lost access to your authenticator?</Link>
+          )}
         </div>
       </section>
     </main>

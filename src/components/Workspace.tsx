@@ -88,6 +88,16 @@ export default function Workspace({
     [mobile, setMobile] = useState(false),
     [busy, setBusy] = useState(false),
     [cursor, setCursor] = useState<string | null>(null);
+  const inventoryBars = [
+    { key: 'available_kg', label: 'Available' },
+    { key: 'reserved_kg', label: 'Reserved' },
+    { key: 'verified_sold_kg', label: 'Verified sold' },
+    { key: 'reported_lost_kg', label: 'Reported lost' },
+  ].map((item) => ({ ...item, value: Number(summary[item.key] ?? 0) }));
+  const inventoryMax = Math.max(0, ...inventoryBars.map((item) => item.value));
+  const hasInventorySummary = inventoryBars.every((item) =>
+    summary[item.key] != null && Number.isFinite(item.value) && item.value >= 0,
+  );
   const endpoint = useCallback(() => {
     if (
       isAdmin &&
@@ -165,6 +175,7 @@ export default function Workspace({
       setCursor(result.nextCursor || null);
       setSummary(stats);
     } catch (e) {
+      setSummary({});
       setMessage(e instanceof Error ? e.message : 'Unable to load workspace.');
     } finally {
       setLoading(false);
@@ -1135,10 +1146,27 @@ export default function Workspace({
                         : 'Review harvest windows, confirm pending offers and coordinate collection before delays become losses.'}
                     </p>
                     <div className="priority-bottom">
-                      <div className="mini-bars">
-                        {[30, 48, 38, 63, 57, 82, 70, 92, 76, 98, 82, 65].map((h, i) => (
-                          <i key={i} style={{ height: h + '%' }} />
-                        ))}
+                      <div className="inventory-chart" aria-label="Produce quantities in kilograms" aria-busy={loading}>
+                        {loading ? (
+                          <p role="status">Loading inventory…</p>
+                        ) : !hasInventorySummary ? (
+                          <p role="status">Inventory data unavailable. Refresh to try again.</p>
+                        ) : (
+                          <>
+                            <div className="inventory-bars">
+                              {inventoryBars.map(({ key, label, value }) => (
+                                <div className="inventory-bar" key={key}>
+                                  <span className="inventory-value">{fmt(value)} kg</span>
+                                  <div className="inventory-track" aria-hidden="true">
+                                    <i style={{ height: `${inventoryMax > 0 ? (value / inventoryMax) * 100 : 0}%` }} />
+                                  </div>
+                                  <span>{label}</span>
+                                </div>
+                              ))}
+                            </div>
+                            {inventoryMax === 0 && <p>No inventory quantities recorded yet.</p>}
+                          </>
+                        )}
                       </div>
                       <Link
                         href={
@@ -1161,8 +1189,8 @@ export default function Workspace({
                     </div>
                     <small>
                       {preview
-                        ? 'Illustrative activity. No live performance data.'
-                        : 'Activity visualization is illustrative; use records below for actual quantities.'}
+                        ? 'Sample inventory quantities. No live performance data.'
+                        : 'Recorded quantities (kg) across your authorized organizations. Sold mass includes independently verified receipts only.'}
                     </small>
                   </section>
                   <section className="panel integrity-panel">
