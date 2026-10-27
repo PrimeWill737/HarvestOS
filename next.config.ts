@@ -5,6 +5,7 @@ const mapOrigins = (process.env.MAP_ALLOWED_ORIGINS || '')
   .filter((x) => /^https:\/\/[a-zA-Z0-9.*:-]+$/.test(x))
   .join(' ');
 const config: NextConfig = {
+  distDir: process.env.HARVEST_E2E === '1' ? '.next-e2e' : '.next',
   poweredByHeader: false,
   devIndicators: false,
   async headers() {
